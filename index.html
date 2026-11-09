@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antoine Lett — rendu 3D et visualisation</title>
+<meta name="description" content="Antoine Lett, ingénieur EPITA 2026 (majeure IMAGE). Moteur de rendu OpenGL, rendu volumique et visualisation 3D en C++.">
+<link rel="preload" href="fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face {
+    font-family: "Archivo";
+    src: url("fonts/archivo.woff2") format("woff2");
+    font-weight: 100 900; font-stretch: 62% 125%; font-display: swap;
+  }
+  :root {
+    --ciel: #2f6fc4;        /* haut du viewport de SViewer */
+    --nuit: #0c1726;        /* bas du viewport */
+    --papier: #f2f4f6;
+    --encre: #121a24;
+    --gris: #56616e;
+    --gris-nuit: #a9b6c6;
+    --xz: #e0484a;          /* plans de coupe de SViewer */
+    --yz: #34a85a;
+    --xy: #3a7be0;
+    --selection: #ffd23f;   /* contour de sélection */
+    --page: 1180px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--papier); color: var(--encre);
+    font-family: "Archivo", "Helvetica Neue", Arial, sans-serif; font-size: 1.0625rem; line-height: 1.6;
+  }
+  img { display: block; max-width: 100%; height: auto; }
+  a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: .2em; }
+  a:focus-visible, input:focus-visible + .poignee, .bouton:focus-visible { outline: 3px solid var(--selection); outline-offset: 3px; }
+  .page { max-width: var(--page); margin: 0 auto; padding: 0 16px; }
+  p { margin: 0 0 1em; max-width: 64ch; }
+  .large-titre { font-stretch: 125%; font-weight: 800; letter-spacing: -.01em; line-height: .95; }
+
+  /* En-tête : le viewport de SViewer */
+  .tete { background: linear-gradient(180deg, var(--ciel) 0%, #173a68 45%, var(--nuit) 100%); color: #fff; overflow: hidden; }
+  .tete .page { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; padding-top: 64px; padding-bottom: 72px; }
+  h1 { font-size: clamp(3rem, 7.4vw, 6.2rem); margin: 0 0 24px; }
+  h1 span { display: block; }
+  .accroche { font-size: 1.25rem; line-height: 1.5; color: #dfe8f3; max-width: 34ch; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-top: 32px; }
+  .bouton { display: inline-block; background: var(--selection); color: var(--encre); font-weight: 650; text-decoration: none; padding: 12px 22px; border-radius: 3px; }
+  .bouton:hover { background: #ffe07a; }
+  .lien-clair { color: #fff; font-weight: 500; }
+
+  .volume { position: relative; aspect-ratio: 831 / 942; background: #000; border: 3px solid var(--xy); }
+  .volume img { width: 100%; height: 100%; object-fit: cover; }
+  .volume-legende { font-size: .9rem; color: var(--gris-nuit); margin-top: 12px; }
+
+  /* SViewer */
+  .sviewer { padding: 88px 0 96px; }
+  .intro-sv { display: grid; grid-template-columns: 1.1fr .9fr; gap: 56px; margin-bottom: 56px; }
+  h2 { font-size: clamp(2.2rem, 4.6vw, 3.6rem); margin: 0 0 20px; }
+  .lieu { color: var(--gris); font-size: .98rem; margin-bottom: 20px; }
+  .pile { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 4px; padding: 0; list-style: none; }
+  .pile li { font-size: .85rem; font-weight: 600; padding: 4px 10px; border: 1px solid #c4ccd5; border-radius: 3px; background: #fff; }
+  .faits { margin: 0; padding: 0; list-style: none; }
+  .faits li { padding: 14px 0 14px 22px; border-bottom: 1px solid #d5dbe1; position: relative; }
+  .faits li:first-child { border-top: 1px solid #d5dbe1; }
+  .faits li::before { content: ""; position: absolute; left: 0; top: 23px; width: 10px; height: 10px; background: var(--c); }
+  .faits strong { font-weight: 700; }
+
+  .mosaique { display: grid; grid-template-columns: repeat(12, 1fr); gap: 36px 24px; }
+  .tuile { margin: 0; }
+  .tuile .cadre { position: relative; overflow: hidden; background: var(--nuit); border-radius: 4px; }
+  .tuile img { width: 100%; height: 100%; object-fit: cover; }
+  .tuile figcaption { font-size: .95rem; line-height: 1.5; color: var(--gris); padding-top: 12px; max-width: 58ch; }
+  .tuile figcaption b { color: var(--encre); font-weight: 700; display: block; font-size: 1.05rem; margin-bottom: 2px; }
+  .t-coupes { grid-column: span 8; } .t-coupes .cadre { height: 560px; }
+  .t-contour { grid-column: span 4; } .t-contour .cadre { height: 560px; }
+  .t-carte { grid-column: span 5; } .t-carte .cadre { height: 590px; }
+  .t-oit { grid-column: span 7; } .t-oit .cadre { height: 590px; }
+
+  /* Comparateur */
+  .compare { --pos: 50%; }
+  .compare img { position: absolute; inset: 0; }
+  .compare .apres { clip-path: inset(0 0 0 var(--pos)); }
+  .compare input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: ew-resize; }
+  .poignee { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; background: var(--selection); pointer-events: none; }
+  .poignee::after { content: "‹ ›"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--selection); color: var(--encre); font-weight: 800; font-size: .9rem; padding: 6px 9px; border-radius: 20px; white-space: nowrap; }
+  .coin { position: absolute; top: 12px; font-size: .8rem; font-weight: 600; color: #fff; background: rgba(12,23,38,.75); padding: 3px 9px; border-radius: 3px; pointer-events: none; }
+  .coin.g { left: 12px; } .coin.d { right: 12px; }
+
+  /* Projets d'école, sur fond de viewport */
+  .ecole { background: var(--nuit); color: #fff; padding: 88px 0 96px; }
+  .ecole .lieu { color: var(--gris-nuit); }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 40px; }
+  .duo .tuile .cadre { aspect-ratio: 1; background: #000; }
+  .duo figcaption { color: var(--gris-nuit); }
+  .duo figcaption b { color: #fff; }
+
+  .quatuor { margin: 64px 0 0; }
+  .quatuor .vignettes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 14px; }
+  .quatuor .vignettes figure { margin: 0; }
+  .quatuor .vignettes video { display: block; width: 100%; height: auto; aspect-ratio: 1; border-radius: 4px; background: #000; }
+  .quatuor .vignettes figcaption { font-size: .85rem; color: var(--gris-nuit); padding-top: 6px; }
+  .quatuor > figcaption { color: var(--gris-nuit); font-size: .95rem; line-height: 1.5; padding-top: 16px; max-width: 72ch; }
+  .quatuor > figcaption b { color: #fff; display: block; font-size: 1.05rem; margin-bottom: 2px; }
+  footer { padding: 80px 0 88px; }
+  .fin { font-size: clamp(1.6rem, 4.4vw, 3.2rem); margin: 0 0 16px; overflow-wrap: anywhere; }
+  .fin a { text-decoration-color: var(--selection); text-decoration-thickness: 4px; text-underline-offset: .15em; }
+  .fin a:hover { background: var(--selection); }
+  .liens-fin { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+
+  @media (max-width: 900px) {
+    .tete .page, .intro-sv, .duo { grid-template-columns: 1fr; }
+    .quatuor .vignettes { grid-template-columns: 1fr 1fr; }
+    .tete .page { padding-top: 40px; padding-bottom: 48px; gap: 36px; }
+    .intro-sv { gap: 28px; }
+    .mosaique > .tuile { grid-column: 1 / -1; }
+    .t-coupes .cadre, .t-contour .cadre, .t-carte .cadre { height: auto; }
+    .t-oit .cadre { height: auto; aspect-ratio: 752 / 616; }
+    .sviewer, .ecole { padding: 56px 0 64px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="tete">
+  <div class="page">
+    <div>
+      <h1 class="large-titre"><span>Antoine</span><span>Lett</span></h1>
+      <p class="accroche">Ingénieur EPITA 2026, majeure IMAGE. J'écris des moteurs de rendu et des outils de visualisation 3D en C++ et OpenGL. Je cherche un CDI en Île-de-France ou en télétravail, disponible immédiatement.</p>
+      <div class="actions">
+        <a class="bouton" href="CV_Antoine_Lett.pdf">Télécharger le CV</a>
+        <a class="lien-clair" href="mailto:antoine.lett@live.fr">antoine.lett@live.fr</a>
+        <a class="lien-clair" href="https://www.linkedin.com/in/antoine-lett-7774252a2/">LinkedIn</a>
+      </div>
+    </div>
+    <figure style="margin:0">
+      <div class="volume">
+        <img src="img/volume.jpg" width="831" height="942" fetchpriority="high" alt="Rendu volumique d'un embryon végétal en microscopie confocale : surface des cellules en tons cuivre et vert sur fond noir.">
+      </div>
+      <figcaption class="volume-legende">Rendu volumique sur GPU dans SViewer.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<main>
+  <section class="sviewer" aria-labelledby="sviewer">
+    <div class="page">
+      <div class="intro-sv">
+        <div>
+          <h2 id="sviewer" class="large-titre">SViewer</h2>
+          <p class="lieu">Stage de fin d'études à l'INRAE (Institut Jean-Pierre Bourgin), Versailles, avril à septembre 2026</p>
+          <p>Le logiciel libre que les biologistes de l'institut utilisent pour regarder l'intérieur de tissus végétaux : le volume brut issu du microscope confocal et les maillages des cellules segmentées. J'en étais le seul développeur pendant six mois, et chaque fonctionnalité passait en revue de code avant d'être intégrée. Le code est hébergé sur la forge de l'INRAE, d'où des captures plutôt que des liens.</p>
+          <ul class="pile" aria-label="Technologies">
+            <li>C++20</li><li>OpenGL 3.3</li><li>GLSL</li><li>Qt Widgets</li><li>Linux et Windows</li>
+          </ul>
+        </div>
+        <ul class="faits">
+          <li style="--c: var(--xy)"><strong>Moteur de rendu migré</strong> du pipeline fixe OpenGL 1.x vers OpenGL 3.3 programmable, un type d'objet à la fois.</li>
+          <li style="--c: var(--xz)"><strong>130 millions de voxels</strong> par volume et jusqu'à 1,4 million de points par maillage, sur les données réelles de l'équipe.</li>
+          <li style="--c: var(--yz)"><strong>Rendu volumique multithreadé</strong>, dont la qualité baisse pendant la manipulation et remonte à l'arrêt.</li>
+          <li style="--c: var(--selection)"><strong>Environ 10 000 lignes</strong> en plus de 50 commits, et un manuel utilisateur de 15 chapitres en anglais.</li>
+        </ul>
+      </div>
+
+      <div class="mosaique">
+        <figure class="tuile t-coupes">
+          <div class="cadre"><img src="img/coupes.jpg" width="1400" height="1190" loading="lazy" style="object-position: 50% 30%" alt="Interface de SViewer : vue 3D avec trois plans de coupe, et les coupes XZ, YZ et XY d'un embryon en microscopie confocale."></div>
+          <figcaption><b>Vues en coupes synchronisées</b>Trois plans XY, XZ et YZ qu'on déplace au curseur, à côté de la vue 3D. Les coupes texturées donnent accès à l'intérieur du volume sans le coût d'un lancer de rayons complet.</figcaption>
+        </figure>
+        <figure class="tuile t-contour">
+          <div class="cadre"><img src="img/contour.jpg" width="859" height="1100" loading="lazy" alt="Maillage de cellules colorées, deux cellules sélectionnées entourées d'un contour jaune net."></div>
+          <figcaption><b>Contour de sélection par Jump Flood</b>Une carte de distance en espace écran, en un nombre logarithmique de passes : son coût ne dépend pas du nombre de triangles.</figcaption>
+        </figure>
+        <figure class="tuile t-carte">
+          <div class="cadre"><img src="img/carte.jpg" width="900" height="1007" loading="lazy" style="object-position: 45% 50%" alt="Maillage d'embryon coloré par le volume de chaque cellule avec une palette du violet au jaune."></div>
+          <figcaption><b>Cartes paramétriques</b>Une mesure par cellule projetée en couleur sur le maillage. En passant à une ligne par cellule, les fichiers de mesures sont passés de plusieurs dizaines de Mo à quelques dizaines de Ko.</figcaption>
+        </figure>
+        <figure class="tuile t-oit">
+          <div class="cadre compare" id="compare">
+            <img src="img/oit-avant.jpg" width="752" height="616" loading="lazy" alt="Maillages de cellules transparents avant correction : les surfaces se masquent dans un ordre incohérent.">
+            <img class="apres" src="img/oit-apres.jpg" width="752" height="616" loading="lazy" alt="Les mêmes maillages avec la transparence indépendante de l'ordre : toutes les couches restent lisibles.">
+            <input type="range" min="0" max="100" value="50" aria-label="Comparer le rendu avant et après la transparence indépendante de l'ordre">
+            <span class="poignee" aria-hidden="true"></span>
+            <span class="coin g" aria-hidden="true">Avant</span>
+            <span class="coin d" aria-hidden="true">Après</span>
+          </div>
+          <figcaption><b>Transparence indépendante de l'ordre</b>Méthode par moyenne pondérée, choisie parce qu'elle tient dans OpenGL 3.3 : la variante de meilleure qualité exige OpenGL 4.0 et aurait exclu les machines plus anciennes des laboratoires. Faites glisser pour comparer.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="ecole" aria-labelledby="ecole">
+    <div class="page">
+      <h2 id="ecole" class="large-titre">Majeure IMAGE</h2>
+      <p class="lieu">Projets de cours à l'EPITA. Les sujets servent encore aux promotions suivantes : je montre les rendus, pas le code.</p>
+      <div class="duo">
+        <figure class="tuile">
+          <div class="cadre"><img src="img/pbr-ibl.jpg" width="700" height="700" loading="lazy" alt="Grille de 25 sphères, du métal poli en haut à gauche au matériau mat en bas à droite, éclairées par une carte d'environnement."></div>
+          <figcaption><b>Physically Based Rendering en WebGL2</b>Diffus de Lambert et spéculaire de Cook-Torrance GGX, éclairage par image d'environnement préfiltrée. La rugosité varie en colonne, la part métallique en ligne.</figcaption>
+        </figure>
+        <figure class="tuile">
+          <div class="cadre"><img src="img/ray-tracer.jpg" width="900" height="900" loading="lazy" alt="Cinq sphères colorées et réfléchissantes posées sur un sol miroir dans une pièce sombre."></div>
+          <figcaption><b>Ray tracer en C++20</b>Réflexions, ombres et éclairage, calculés entièrement sur CPU.</figcaption>
+        </figure>
+      </div>
+      <figure class="quatuor">
+        <div class="vignettes">
+          <figure><video src="video/pogla-vitrail.mp4" poster="video/pogla-vitrail.jpg" width="520" height="520" muted loop playsinline preload="none" aria-label="Lapin de Stanford tordu et bombé, couvert d'un vitrail de cellules colorées aux contours lumineux, sur fond noir."></video><figcaption>Courbure et torsion du maillage, vitrail Voronoi, contours, aberration chromatique, vignettage</figcaption></figure>
+          <figure><video src="video/pogla-fonte.mp4" poster="video/pogla-fonte.jpg" width="520" height="520" muted loop playsinline preload="none" aria-label="Lapin qui se tord sur un fond en anneaux orange et bleu dont les couleurs s'inversent."></video><figcaption>Torsion, fonte Voronoi, distorsion liquide, décalage de couleur, aberration chromatique</figcaption></figure>
+          <figure><video src="video/pogla-tunnel.mp4" poster="video/pogla-tunnel.jpg" width="520" height="520" muted loop playsinline preload="none" aria-label="Lapin en noir et blanc étiré puis aspiré dans un tunnel, sur fond clair."></video><figcaption>Torsion, tunnel, inversion des couleurs, contours</figcaption></figure>
+          <figure><video src="video/pogla-ondes.mp4" poster="video/pogla-ondes.jpg" width="520" height="520" muted loop playsinline preload="none" aria-label="Lapin aux couleurs pastel déformé par des ondes concentriques, sur fond noir."></video><figcaption>Torsion, paquets d'ondes, arc-en-ciel, contours, vignettage</figcaption></figure>
+          <figure><video src="video/pogla-arcenciel.mp4" poster="video/pogla-arcenciel.jpg" width="520" height="520" muted loop playsinline preload="none" aria-label="Lapin qui pivote devant un fond de taches irisées en mouvement."></video><figcaption>Torsion, arc-en-ciel sur toute l'image, Voronoi, contours, vignettage</figcaption></figure>
+          <figure><video src="video/pogla-glitch.mp4" poster="video/pogla-glitch.jpg" width="520" height="520" muted loop playsinline preload="none" aria-label="Lapin irisé découpé en bandes horizontales qui glissent, façon écran cathodique."></video><figcaption>Cisaillement de pixels, glitch, arc-en-ciel, masque CRT, aberration chromatique, vignettage</figcaption></figure>
+        </div>
+        <figcaption><b>Compute shaders en OpenGL 4.5</b>Projet de programmation OpenGL avancée en C++. Trois passes de compute shaders par image : la première déforme le maillage du lapin de Stanford directement dans des buffers GPU (pulsation, torsion, ondulation, bruit), les deux suivantes appliquent une vingtaine d'effets de post-traitement, du CRT à la fonte Voronoi. Tout l'enjeu est la fusion : chaque effet s'active indépendamment et se cumule avec les autres dans la même image. Les six boucles ci-dessus sont enregistrées directement depuis le programme, chacune avec la liste des effets combinés. Tous les paramètres se règlent en direct dans une interface ImGui.</figcaption>
+      </figure>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="page">
+    <p class="fin large-titre"><a href="mailto:antoine.lett@live.fr">antoine.lett@live.fr</a></p>
+    <p>Pour un poste en rendu, en visualisation ou en développement C++.</p>
+    <p class="liens-fin"><a href="CV_Antoine_Lett.pdf">CV en PDF</a><a href="https://www.linkedin.com/in/antoine-lett-7774252a2/">LinkedIn</a></p>
+  </div>
+</footer>
+
+<script>
+  // Boucles POGLA : lecture seulement quand elles sont visibles, et jamais si l'utilisateur demande moins d'animations
+  const calme = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const videos = document.querySelectorAll('.quatuor video');
+  if (calme) {
+    videos.forEach(vd => vd.controls = true);
+  } else if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(entrees => entrees.forEach(en => {
+      if (en.isIntersecting) { en.target.preload = 'auto'; en.target.play().catch(() => {}); }
+      else en.target.pause();
+    }), { rootMargin: '200px 0px' });
+    videos.forEach(vd => io.observe(vd));
+  }
+  const c = document.getElementById('compare');
+  c.querySelector('input').addEventListener('input', e => c.style.setProperty('--pos', e.target.value + '%'));
+</script>
+</body>
+</html>
